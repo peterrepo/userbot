@@ -1,53 +1,37 @@
-# Core Telegram Libraries
-telethon==1.34.0
-
-# Database & Caching
-pymongo==4.6.1
-redis==5.0.1
-sqlalchemy==2.0.30
-
-# Google & AI Services
-google-api-python-client==2.122.0
-google-auth==2.29.0
-google-auth-oauthlib==1.2.0
-google-auth-httplib2==0.2.0
-
-# Image Processing & OCR
-Pillow==10.3.0
-pytesseract==0.3.10
-opencv-python==4.9.0.80
-rembg==2.0.56
-
-# Audio, Music, and Video
-yt-dlp==2024.4.9
-youtube-search-python==1.6.6
-spotipy==2.23.0
-mutagen==1.47.0
-ffmpeg-python==0.2.0
-
-# Web Scraping & HTTP Requests
-beautifulsoup4==4.12.3
-requests==2.31.0
-httpx==0.27.0
-aiohttp==3.9.3
-
-# Fun / Miscellaneous
-emoji==2.10.1
-qrcode==7.4.2
-cowsay==5.0
-psutil==5.9.8
-pyfiglet==1.0.2
-
-# Encryption & Security
-cryptography==42.0.5
-
-# JSON Handling & Utilities
-python-dotenv==1.0.1
-
-# Extras for Text & Translate
-deep-translator==1.11.4
-html2text==2024.2.25
-wikipedia-api==0.6.0
-
-# PDF & Files
-PyMuPDF==1.24.2
+telethon
+pymongo
+redis
+sqlalchemy
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+gtts
+Pillow
+pytesseract
+opencv-python
+rembg
+yt-dlp
+youtube-search-python
+spotipy
+mutagen
+ffmpeg-python
+pytube
+pydub
+beautifulsoup4
+requests
+httpx
+aiohttp
+lxml
+emoji
+qrcode
+cowsay
+psutil
+pyfiglet
+cryptography
+python-dotenv
+deep-translator
+html2text
+wikipedia-api
+PyMuPDF
+praw
