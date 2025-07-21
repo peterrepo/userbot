@@ -1,29 +1,19 @@
-"""
-UserBot - Complete Dynamic Userbot Loader
-(C) 2025 Godhunter / Alpha UserBot Project
-"""
-
 import asyncio
 import time
-import importlib
+import threading
 from datetime import datetime
+from flask import Flask
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
-from flask import Flask
-import threading
-
-# ======================
-# CONFIGURATION
-# ======================
 from config import API_ID, API_HASH, SESSION_STRING, OWNER_ID
 
 # ======================
-# BOT START TIME
+# Start time for uptime
 # ======================
 START_TIME = time.time()
 
 # ======================
-# MODULES LIST
+# Import ALL modules
 # ======================
 ALL_MODULES = [
     "afk", "animation", "anime_cf", "antipm", "autopic", "autoscroll",
@@ -41,18 +31,18 @@ ALL_MODULES = [
 ]
 
 # ======================
-# TELETHON CLIENT
+# Initialize Telethon client
 # ======================
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 # ======================
-# DYNAMIC MODULE LOADER
+# Dynamic Module Loader
 # ======================
 def register_modules():
     loaded_count = 0
     for module_name in ALL_MODULES:
         try:
-            module = importlib.import_module(f"modules.{module_name}")
+            module = __import__(f"modules.{module_name}", fromlist=["register"])
             if hasattr(module, "register"):
                 module.register(client)
             print(f"✅ Loaded: {module_name}")
@@ -62,20 +52,15 @@ def register_modules():
     return loaded_count
 
 # ======================
-# OWNER-ONLY COMMAND GUARD
+# Owner-only Command Guard
 # ======================
 @client.on(events.NewMessage(pattern=r"^\.(\w+)"))
 async def guard(event):
     if event.sender_id != OWNER_ID:
-        return  # Ignore messages from non-owner
-    await asyncio.sleep(2)
-    try:
-        await event.delete()  # Auto-delete after 2 seconds
-    except:
-        pass
+        return  # Silently ignore non-owner commands
 
 # ======================
-# .ALIVE COMMAND
+# .alive Command
 # ======================
 @client.on(events.NewMessage(pattern=r"^\.alive$"))
 async def alive_command(event):
@@ -90,31 +75,32 @@ async def alive_command(event):
         f"**Modules Loaded:** `{module_count}`\n"
         f"**Current Time:** `{now}`"
     )
-    await asyncio.sleep(2)
-    try:
-        await event.delete()
-    except:
-        pass
 
 # ======================
-# KEEP-ALIVE SERVER
+# Auto-Pinger (Keep Alive)
 # ======================
-app = Flask('')
+async def auto_ping():
+    while True:
+        try:
+            await client.send_message("me", f"🤖 Auto-ping at {time.strftime('%H:%M:%S')}")
+        except Exception as e:
+            print(f"[Auto-Ping Error] {e}")
+        await asyncio.sleep(300)  # 5 minutes
+
+# ======================
+# Flask Keepalive Server
+# ======================
+app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🤖 UserBot KeepAlive Server Running!"
+    return "UserBot is running!"
 
-def run_web():
+def run_flask():
     app.run(host="0.0.0.0", port=8080)
 
-def keep_alive():
-    t = threading.Thread(target=run_web)
-    t.daemon = True
-    t.start()
-
 # ======================
-# START BOT
+# Start Bot
 # ======================
 async def start_bot():
     print("🔄 Starting UserBot...")
@@ -122,10 +108,13 @@ async def start_bot():
     print("🔐 Logged in successfully!")
     loaded = register_modules()
     print(f"📦 Loaded {loaded}/{len(ALL_MODULES)} modules.")
+    asyncio.create_task(auto_ping())
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    keep_alive()  # Start KeepAlive for UptimeRobot
+    # Start Flask server in a separate thread
+    threading.Thread(target=run_flask).start()
+
     try:
         client.loop.run_until_complete(start_bot())
     except KeyboardInterrupt:
