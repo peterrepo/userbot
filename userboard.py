@@ -1,6 +1,7 @@
 import asyncio
 import time
 import threading
+import importlib
 from datetime import datetime
 from flask import Flask
 from telethon import TelegramClient, events
@@ -13,7 +14,7 @@ from config import API_ID, API_HASH, SESSION_STRING, OWNER_ID
 START_TIME = time.time()
 
 # ======================
-# Import ALL modules
+# Modules List
 # ======================
 ALL_MODULES = [
     "afk", "animation", "anime_cf", "antipm", "autopic", "autoscroll",
@@ -42,7 +43,8 @@ def register_modules():
     loaded_count = 0
     for module_name in ALL_MODULES:
         try:
-            module = __import__(f"modules.{module_name}", fromlist=["register"])
+            module = importlib.import_module(f"modules.{module_name}")
+            # If module has `register()` function, call it
             if hasattr(module, "register"):
                 module.register(client)
             print(f"✅ Loaded: {module_name}")
@@ -56,8 +58,9 @@ def register_modules():
 # ======================
 @client.on(events.NewMessage(pattern=r"^\.(\w+)"))
 async def guard(event):
+    # Ignore commands from non-owner users
     if event.sender_id != OWNER_ID:
-        return  # Silently ignore non-owner commands
+        return
 
 # ======================
 # .alive Command
@@ -112,9 +115,7 @@ async def start_bot():
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    # Start Flask server in a separate thread
     threading.Thread(target=run_flask).start()
-
     try:
         client.loop.run_until_complete(start_bot())
     except KeyboardInterrupt:
