@@ -1,3 +1,4 @@
+import asyncio
 from telethon import events
 from config import OWNER_ID
 

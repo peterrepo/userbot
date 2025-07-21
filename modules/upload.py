@@ -1,7 +1,7 @@
 import os
 import requests
 from telethon import events
-from config import OWNER_ID, GDRIVE_API_KEY, GDRIVE_FOLDER_ID, TELEGRAPH_TOKEN
+from config import OWNER_ID, GDRIVE_API_KEY, GDRIVE_FOLDER_ID
 
 # Owner check decorator
 def is_owner(func):

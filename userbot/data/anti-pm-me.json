@@ -1,0 +1,10 @@
+{
+    "enabled": false,
+    "whitelist": [
+        7292202061
+    ],
+    "blacklist": [],
+    "warnings": {
+        "8084098311": 1
+    }
+}

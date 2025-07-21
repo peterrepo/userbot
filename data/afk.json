@@ -1,1 +1,5 @@
-{"is_afk": false, "message": ""}
+{
+    "is_afk": false,
+    "reason": "",
+    "since": ""
+}

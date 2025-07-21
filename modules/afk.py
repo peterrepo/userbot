@@ -1,59 +1,90 @@
-import json
 import os
+import json
+from datetime import datetime
 from telethon import events
-from config import OWNER_ID
 
-AFK_FILE = "data/afk.json"
+# ======================
+# AFK FILE PATH
+# ======================
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # userbot/
+DATA_DIR = os.path.join(BASE_DIR, "data")
+AFK_FILE = os.path.join(DATA_DIR, "afk.json")
 
-# Load or create AFK data
-if not os.path.exists(AFK_FILE):
+# ======================
+# AFK STATE
+# ======================
+AFK_STATE = {
+    "is_afk": False,
+    "reason": "",
+    "since": ""
+}
+
+# ======================
+# Helper Functions
+# ======================
+def ensure_afk_file():
+    if not os.path.exists(AFK_FILE):
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(AFK_FILE, "w") as f:
+            json.dump(AFK_STATE, f, indent=4)
+
+def save_afk_state():
+    ensure_afk_file()
     with open(AFK_FILE, "w") as f:
-        json.dump({"is_afk": False, "reason": ""}, f)
+        json.dump(AFK_STATE, f, indent=4)
 
-
-def load_afk():
+def load_afk_state():
+    ensure_afk_file()
     with open(AFK_FILE, "r") as f:
         return json.load(f)
 
-
-def save_afk(data):
-    with open(AFK_FILE, "w") as f:
-        json.dump(data, f)
-
-
+# ======================
+# Register AFK Module
+# ======================
 def register(client):
-    # ======================
-    # .afk command
-    # ======================
-    @client.on(events.NewMessage(pattern=r"\.afk ?(.*)"))
+    ensure_afk_file()
+
+    @client.on(events.NewMessage(pattern=r"^\.afk(?: (.*))?$"))
     async def set_afk(event):
-        if event.sender_id != OWNER_ID:
-            return
-        reason = event.pattern_match.group(1) or "AFK"
-        afk_data = {"is_afk": True, "reason": reason}
-        save_afk(afk_data)
-        await event.respond(f"**AFK mode ON. Reason:** {reason}")
-        await event.delete()
+        reason = event.pattern_match.group(1) or "No reason provided."
+        AFK_STATE.update({
+            "is_afk": True,
+            "reason": reason,
+            "since": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+        save_afk_state()
+        await event.respond(f"**AFK activated.**\nReason: `{reason}`")
 
-    # ======================
-    # .back command
-    # ======================
-    @client.on(events.NewMessage(pattern=r"\.back"))
+    @client.on(events.NewMessage(pattern=r"^\.back$"))
     async def remove_afk(event):
-        if event.sender_id != OWNER_ID:
-            return
-        save_afk({"is_afk": False, "reason": ""})
-        await event.respond("**AFK mode OFF.**")
-        await event.delete()
+        AFK_STATE.update({"is_afk": False, "reason": "", "since": ""})
+        save_afk_state()
+        await event.respond("**Welcome back!** AFK mode is now off.")
 
-    # ======================
-    # Auto-reply when AFK
-    # ======================
-    @client.on(events.NewMessage(incoming=True))
-    async def afk_auto_reply(event):
-        if event.sender_id == OWNER_ID:
+    @client.on(events.NewMessage())
+    async def afk_responder(event):
+        state = load_afk_state()
+        if not state.get("is_afk"):
             return
-        afk_data = load_afk()
-        if afk_data.get("is_afk", False):
-            if event.is_private or (await event.get_sender()).id != OWNER_ID:
-                await event.reply(f"**I am currently AFK. Reason:** {afk_data['reason']}")
+
+        # Check if the message should trigger AFK
+        should_reply = False
+
+        # Private message (DM)
+        if event.is_private:
+            should_reply = True
+
+        # Mentioned in group chat
+        elif event.message.mentioned:
+            should_reply = True
+
+        # Someone replied to your message
+        elif event.is_reply:
+            reply_msg = await event.get_reply_message()
+            if reply_msg and reply_msg.sender_id == (await client.get_me()).id:
+                should_reply = True
+
+        if should_reply:
+            reason = state.get("reason", "No reason.")
+            since = state.get("since", "Unknown time.")
+            await event.reply(f"**I am AFK.**\nReason: `{reason}`\nSince: `{since}`")

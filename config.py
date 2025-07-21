@@ -1,3 +1,7 @@
+import os 
+BASE_DIR = "/home/godhunter/newgit/userbot"
+DATA_DIR = os.path.join(BASE_DIR, "data")
+GLOBALS_JSON = os.path.join(DATA_DIR, "globals.json")
 # ======================
 # TELEGRAM CONFIGURATION
 # ======================
@@ -17,7 +21,7 @@ SQL_DB_URL = ""       # SQLAlchemy Database URL
 # GOOGLE & AI SERVICES
 # ======================
 GOOGLE_API_KEY = "AIzaSyBWXm6c5bKyQaLwSDZ35nWmg38dTT8mH6U"  # Google API Key
-CSE_ID = "07ff5954378d54935"  # Google Custom Search Engine ID
+GOOGLE_CSE_ID = "07ff5954378d54935"  # Google Custom Search Engine ID
 YT_API_KEY = "AIzaSyBWXm6c5bKyQaLwSDZ35nWmg38dTT8mH6U"  # YouTube Data API Key
 WEATHER_API_KEY = "10dd39ebd0e578efd3fcd22a0110e742"  # OpenWeatherMap API key
 MAPS_API_KEY = ""  # Google Maps API Key
@@ -35,3 +39,8 @@ TWITTER_ACCESS_SECRET = ""            # Twitter Access Secret
 TENOR_API_KEY = "AIzaSyBWXm6c5bKyQaLwSDZ35nWmg38dTT8mH6U"
 MAX_SPAM_MESSAGES = 1000
 SPAM_DELAY = 0.3
+ENCRYPTION_KEY = ""
+CSE_ID = "07ff5954378d54935" 
+BITLY_API_KEY = "73ad55f43dbf8e5ed80b1e959eb80fa2a31701b7"
+GDRIVE_API_KEY = "AIzaSyB-6IfMnLZpSq55Wc69Uqts3qmCY6ZmQgE"
+GDRIVE_FOLDER_ID = "1dRGJynWK3Y33lww5VxQpdVIkck0RxXzb"

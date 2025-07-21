@@ -1,63 +1,55 @@
+# pats.py — Pat, Kiss, Hug, and "F" lines module (Owner only)
 import random
 from telethon import events
 from config import OWNER_ID
 
-# Local GIF/IMG lists (you can expand or load from data JSON)
+# Define responses
 PATS = [
-    "https://media.tenor.com/ebVhbxA_Ae8AAAAC/anime-pat.gif",
-    "https://media.tenor.com/FPyB_7ZvqJ4AAAAC/pat.gif",
+    "🤗 gently pats you on the head.",
+    "👐 gives you a big warm pat!",
+    "😺 purrs and pats your face.",
 ]
 
 KISSES = [
-    "https://media.tenor.com/PblowV6HgKQAAAAC/anime-kiss.gif",
-    "https://media.tenor.com/GEUhtF3UGyIAAAAC/kiss.gif",
+    "💋 plants a soft kiss on your cheek.",
+    "😘 kisses you deeply.",
+    "😽 smooches you affectionately.",
 ]
 
 HUGS = [
-    "https://media.tenor.com/6vE6c7rZ4J4AAAAC/hug-anime.gif",
-    "https://media.tenor.com/5Ha27yZpQoIAAAAC/hug-love.gif",
+    "🤗 gives you a tight warm hug.",
+    "👐 wraps arms around you in a cuddle.",
+    "🤝 offers a comforting embrace.",
 ]
 
 FUCKS = [
-    "https://media.tenor.com/7kL9vNYY43MAAAAC/hentai-sex.gif",
-    "https://media.tenor.com/jfKPVnX2gRMAAAAC/anime-hentai.gif",
+    "🔞 grabs you and... you know the rest 😏",
+    "💦 moans... damn.",
+    "😈 gets freaky under the sheets.",
 ]
 
-# Owner check decorator
-def is_owner(func):
-    async def wrapper(event, *args, **kwargs):
-        if event.sender_id != OWNER_ID:
-            await event.reply("❌ You are not authorized to use this command.")
-            return
-        return await func(event, *args, **kwargs)
-    return wrapper
 
 def register(client):
-
     @client.on(events.NewMessage(pattern=r"^\.pat$"))
-    @is_owner
-    async def pat_command(event):
-        gif = random.choice(PATS)
-        await client.send_file(event.chat_id, gif, caption="🤚 *Pat pat!*")
-        await event.delete()
+    async def pat_handler(event):
+        if event.sender_id != OWNER_ID:
+            return
+        await event.respond(random.choice(PATS))
 
     @client.on(events.NewMessage(pattern=r"^\.kiss$"))
-    @is_owner
-    async def kiss_command(event):
-        gif = random.choice(KISSES)
-        await client.send_file(event.chat_id, gif, caption="💋 *Kiss!*")
-        await event.delete()
+    async def kiss_handler(event):
+        if event.sender_id != OWNER_ID:
+            return
+        await event.respond(random.choice(KISSES))
 
     @client.on(events.NewMessage(pattern=r"^\.hug$"))
-    @is_owner
-    async def hug_command(event):
-        gif = random.choice(HUGS)
-        await client.send_file(event.chat_id, gif, caption="🤗 *Hug!*")
-        await event.delete()
+    async def hug_handler(event):
+        if event.sender_id != OWNER_ID:
+            return
+        await event.respond(random.choice(HUGS))
 
     @client.on(events.NewMessage(pattern=r"^\.fuck$"))
-    @is_owner
-    async def fuck_command(event):
-        gif = random.choice(FUCKS)
-        await client.send_file(event.chat_id, gif, caption="🔞 *NSFW!*")
-        await event.delete()
+    async def fuck_handler(event):
+        if event.sender_id != OWNER_ID:
+            return
+        await event.respond(random.choice(FUCKS))

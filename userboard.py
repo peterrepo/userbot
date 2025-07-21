@@ -1,77 +1,104 @@
-import os
 import asyncio
-import importlib
+import time
+from datetime import datetime
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
+from config import API_ID, API_HASH, SESSION_STRING, OWNER_ID
 
-# ========== CONFIG ==========
-API_ID = 28289547
-API_HASH = "fb26885f55aad0acbda5ac7f3adf60f6"
-OWNER_ID = 7292202061
-SESSION_NAME = "userbot87"  # session file name
-# ============================
+# ======================
+# Start time for uptime
+# ======================
+START_TIME = time.time()
 
-client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+# ======================
+# Import ALL modules
+# ======================
+ALL_MODULES = [
+    "afk", "animation", "anime_cf", "antipm", "autopic", "autoscroll",
+    "autosaver", "basic", "broadcast", "carbon", "clone", "create",
+    "destruct", "dictionary", "dmspam", "emoji", "encryption", "extrafun",
+    "files", "ghost", "gifs", "git", "globals", "google", "group",
+    "image", "info", "insta", "invite", "joinleave", "locks",
+    "lyrics", "memify", "meme", "mention", "metrics", "music",
+    "paste", "pats", "ping", "profile", "purge", "qrcode",
+    "quotly", "raid", "reaction", "replyraid", "restart", "sangmata",
+    "screenshot", "spam", "start", "stats", "sticker", "stickers",
+    "tag", "tagalert", "tagall", "text", "tiny", "translate",
+    "truthgame", "update", "upload", "vctools", "vulgar", "weather",
+    "wiki", "youtube"
+]
 
+# ======================
+# Initialize Telethon client
+# ======================
+client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
-# ========== OWNER CHECK ==========
-def is_owner(sender_id):
-    return sender_id == OWNER_ID
-
-
-# ========== AUTO DELETE DECORATOR ==========
-async def respond_and_delete(event, message):
-    reply = await event.respond(message)
-    await asyncio.sleep(0.5)
-    await reply.delete()
-    await event.delete()
-
-
-# ========== BASIC COMMANDS ==========
-@client.on(events.NewMessage(pattern=r"\.ping"))
-async def ping(event):
-    if not is_owner(event.sender_id):
-        return
-    await respond_and_delete(event, "Pong!")
-
-
-@client.on(events.NewMessage(pattern=r"\.alive"))
-async def alive(event):
-    if not is_owner(event.sender_id):
-        return
-    await respond_and_delete(event, "✅ UserBot is alive and running!")
-
-
-# ========== DYNAMIC MODULE LOADER ==========
-def load_modules():
-    modules_dir = os.path.join(os.getcwd(), "modules")
-    if not os.path.exists(modules_dir):
-        print("No modules directory found.")
-        return
-
-    modules = [m.replace(".py", "") for m in os.listdir(modules_dir) if m.endswith(".py")]
-
-    print(f"Found modules: {modules}")
-    for module_name in modules:
+# ======================
+# Dynamic Module Loader
+# ======================
+def register_modules():
+    loaded_count = 0
+    for module_name in ALL_MODULES:
         try:
-            mod = importlib.import_module(f"modules.{module_name}")
-            if hasattr(mod, "register"):
-                mod.register(client)
-            print(f"✅ Loaded module: {module_name}")
+            module = __import__(f"modules.{module_name}", fromlist=["register"])
+            if hasattr(module, "register"):
+                module.register(client)
+            print(f"✅ Loaded: {module_name}")
+            loaded_count += 1
         except Exception as e:
             print(f"❌ Failed to load {module_name}: {e}")
+    return loaded_count
 
+# ======================
+# Owner-only Command Guard
+# ======================
+@client.on(events.NewMessage(pattern=r"^\.(\w+)"))
+async def guard(event):
+    if event.sender_id != OWNER_ID:
+        return  # Silently ignore non-owner commands
 
-# ========== MAIN ==========
-async def main():
+# ======================
+# .alive Command
+# ======================
+@client.on(events.NewMessage(pattern=r"^\.alive$"))
+async def alive_command(event):
+    if event.sender_id != OWNER_ID:
+        return
+    uptime = time.strftime("%H:%M:%S", time.gmtime(time.time() - START_TIME))
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    module_count = len([m for m in ALL_MODULES])
+    await event.respond(
+        f"**🤖 UserBot is Alive!**\n\n"
+        f"**Uptime:** `{uptime}`\n"
+        f"**Modules Loaded:** `{module_count}`\n"
+        f"**Current Time:** `{now}`"
+    )
+
+# ======================
+# Auto-Pinger (Keep Alive)
+# ======================
+async def auto_ping():
+    while True:
+        try:
+            await client.send_message("me", f"🤖 Auto-ping at {time.strftime('%H:%M:%S')}")
+        except Exception as e:
+            print(f"[Auto-Ping Error] {e}")
+        await asyncio.sleep(300)  # 5 minutes
+
+# ======================
+# Start Bot
+# ======================
+async def start_bot():
     print("🔄 Starting UserBot...")
     await client.start()
     print("🔐 Logged in successfully!")
-
-    load_modules()
-    print("📦 All modules loaded (skipped errors).")
-
+    loaded = register_modules()
+    print(f"📦 Loaded {loaded}/{len(ALL_MODULES)} modules.")
+    asyncio.create_task(auto_ping())
     await client.run_until_disconnected()
 
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        client.loop.run_until_complete(start_bot())
+    except KeyboardInterrupt:
+        print("Bot stopped by user.")

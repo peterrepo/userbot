@@ -1,83 +1,57 @@
-import json
 import os
 import random
 from telethon import events
-from config import OWNER_ID
 
-# Path to replyraid data
-REPLYRAID_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "replyraid.json")
+# Path to raid lines file
+RAID_LINES_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "raid_lines.txt")
 
-# Active user ID for reply raid
-active_reply_raid_user = None
+# Keep state of active raids
+active_raids = set()
+raid_lines = []
 
-# Load reply raid lines
-def load_reply_lines():
-    if not os.path.exists(REPLYRAID_FILE):
-        return ["🔥 Default reply raid line! 🔥"]
-    with open(REPLYRAID_FILE, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except:
-            return ["🔥 Default reply raid line! 🔥"]
-
-REPLY_LINES = load_reply_lines()
-
-# Owner check decorator
-def is_owner(func):
-    async def wrapper(event, *args, **kwargs):
-        if event.sender_id != OWNER_ID:
-            await event.reply("❌ You are not authorized to use this command.")
-            return
-        return await func(event, *args, **kwargs)
-    return wrapper
-
+# Load raid lines
+def load_raid_lines():
+    global raid_lines
+    if os.path.exists(RAID_LINES_FILE):
+        with open(RAID_LINES_FILE, "r", encoding="utf-8") as f:
+            raid_lines = [line.strip() for line in f if line.strip()]
+    else:
+        raid_lines = ["🔥 Default raid line!", "⚡ Boom!"]
 
 def register(client):
+    load_raid_lines()
 
-    # -------------------
-    # Start Reply Raid
-    # -------------------
-    @client.on(events.NewMessage(pattern=r"^\.replyraid$"))
-    @is_owner
-    async def start_reply_raid(event):
-        global active_reply_raid_user
-        reply = await event.get_reply_message()
-        if not reply:
-            return await event.edit("❌ Reply to a user's message to start reply raid.")
-        active_reply_raid_user = reply.sender_id
-        await event.edit(f"🔥 **Reply raid started on user ID:** `{active_reply_raid_user}`")
+    @client.on(events.NewMessage(pattern=r"^\.replyraid (on|off)$"))
+    async def toggle_replyraid(event):
+        """Enable or disable reply raid on a user by replying to their message."""
+        if not event.is_reply:
+            await event.respond("⚠ **Reply to a user's message to start raid!**")
+            return
 
-    # -------------------
-    # Stop Reply Raid
-    # -------------------
-    @client.on(events.NewMessage(pattern=r"^\.stopreplyraid$"))
-    @is_owner
-    async def stop_reply_raid(event):
-        global active_reply_raid_user
-        active_reply_raid_user = None
-        await event.edit("🛑 **Reply raid stopped.**")
+        action = event.pattern_match.group(1)
+        reply_msg = await event.get_reply_message()
+        user_id = reply_msg.sender_id
 
-    # -------------------
-    # Reply Raid Trigger
-    # -------------------
+        if action == "on":
+            active_raids.add(user_id)
+            await event.respond(f"🚀 **Reply Raid ON** for user `{user_id}`!")
+        else:
+            active_raids.discard(user_id)
+            await event.respond(f"🛑 **Reply Raid OFF** for user `{user_id}`.")
+
     @client.on(events.NewMessage)
-    async def reply_raid_trigger(event):
-        global active_reply_raid_user
-        if not active_reply_raid_user:
+    async def handle_incoming(event):
+        """Check if a user in active raid triggers a reply."""
+        if not active_raids or not event.sender_id:
             return
 
-        # Check if this user triggered the raid
-        if event.sender_id != active_reply_raid_user:
-            return
-
-        # Avoid self-replies
-        if event.sender_id == OWNER_ID:
-            return
-
-        # Send a random raid line
-        line = random.choice(REPLY_LINES)
-        try:
-            await event.reply(line)
-        except Exception as e:
-            print(f"[ReplyRaid Error] {e}")
+        # Check if sender is in active raid
+        if event.sender_id in active_raids:
+            # Send random raid line
+            if raid_lines:
+                line = random.choice(raid_lines)
+                try:
+                    await event.reply(line)
+                except Exception as e:
+                    print(f"[ReplyRaid Error] {e}")
 

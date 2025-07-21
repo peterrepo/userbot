@@ -1,52 +1,135 @@
-import asyncio
-from telethon import events
-from config import OWNER_ID
+import json
+import os
+from telethon import events, functions
 
-# State storage
-ANTI_PM_ACTIVE = False
-USER_WARNINGS = {}  # {user_id: warning_count}
-MAX_WARNINGS = 3
+# Path to Anti-PM data file
+DATA_DIR = "userbot/data"
+DATA_FILE = os.path.join(DATA_DIR, "anti-pm-me.json")
 
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# Load and save JSON
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        data = {"enabled": True, "whitelist": [], "blacklist": [], "warnings": {}}
+        save_data(data)
+    else:
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+    return data
+
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+data = load_data()
 
 def register(client):
-    # ======================
-    # Toggle Anti-PM
-    # ======================
+
+    # Helper to get target user
+    async def get_target_user(event):
+        if event.is_reply:
+            msg = await event.get_reply_message()
+            user = await msg.get_sender()
+        else:
+            user = await event.get_sender()
+        return user
+
+    # Toggle Anti-PM ON/OFF
     @client.on(events.NewMessage(pattern=r"\.antipm (on|off)$"))
     async def toggle_antipm(event):
-        global ANTI_PM_ACTIVE
-        if event.sender_id != OWNER_ID:
-            return
-        state = event.pattern_match.group(1).lower()
-        ANTI_PM_ACTIVE = state == "on"
-        await event.edit(f"**Anti-PM is now {'ON' if ANTI_PM_ACTIVE else 'OFF'}.**")
-        await asyncio.sleep(0.5)
-        await event.delete()
+        mode = event.pattern_match.group(1).lower()
+        data["enabled"] = (mode == "on")
+        save_data(data)
+        await event.respond(f"**Anti-PM is now {'ON' if data['enabled'] else 'OFF'}**")
 
-    # ======================
-    # Monitor Private Messages
-    # ======================
+    # Add user to whitelist
+    @client.on(events.NewMessage(pattern=r"\.addwl$"))
+    async def add_whitelist(event):
+        user = await get_target_user(event)
+        if user.id not in data["whitelist"]:
+            data["whitelist"].append(user.id)
+            save_data(data)
+            await event.respond(f"**Added {user.first_name} to whitelist.**")
+        else:
+            await event.respond("**User is already in whitelist.**")
+
+    # Remove user from whitelist
+    @client.on(events.NewMessage(pattern=r"\.rmwl$"))
+    async def remove_whitelist(event):
+        user = await get_target_user(event)
+        if user.id in data["whitelist"]:
+            data["whitelist"].remove(user.id)
+            save_data(data)
+            await event.respond(f"**Removed {user.first_name} from whitelist.**")
+        else:
+            await event.respond("**User is not in whitelist.**")
+
+    # Show whitelist
+    @client.on(events.NewMessage(pattern=r"\.showwl$"))
+    async def show_whitelist(event):
+        if not data["whitelist"]:
+            await event.respond("**Whitelist is empty.**")
+            return
+        msg = "**Whitelisted Users:**\n"
+        for uid in data["whitelist"]:
+            msg += f"- `{uid}`\n"
+        await event.respond(msg)
+
+    # Add user to blacklist
+    @client.on(events.NewMessage(pattern=r"\.addbl$"))
+    async def add_blacklist(event):
+        user = await get_target_user(event)
+        if user.id not in data["blacklist"]:
+            data["blacklist"].append(user.id)
+            save_data(data)
+            await event.respond(f"**Added {user.first_name} to blacklist.**")
+        else:
+            await event.respond("**User is already in blacklist.**")
+
+    # Remove user from blacklist
+    @client.on(events.NewMessage(pattern=r"\.rmbl$"))
+    async def remove_blacklist(event):
+        user = await get_target_user(event)
+        if user.id in data["blacklist"]:
+            data["blacklist"].remove(user.id)
+            save_data(data)
+            await event.respond(f"**Removed {user.first_name} from blacklist.**")
+        else:
+            await event.respond("**User is not in blacklist.**")
+
+    # Show blacklist
+    @client.on(events.NewMessage(pattern=r"\.showbl$"))
+    async def show_blacklist(event):
+        if not data["blacklist"]:
+            await event.respond("**Blacklist is empty.**")
+            return
+        msg = "**Blacklisted Users:**\n"
+        for uid in data["blacklist"]:
+            msg += f"- `{uid}`\n"
+        await event.respond(msg)
+
+    # Anti-PM logic
     @client.on(events.NewMessage(incoming=True))
-    async def monitor_pm(event):
-        if not ANTI_PM_ACTIVE:
+    async def check_pm(event):
+        if not data["enabled"] or not event.is_private:
             return
-        if event.is_private and event.sender_id != OWNER_ID:
-            user_id = event.sender_id
 
-            # Update warning count
-            USER_WARNINGS[user_id] = USER_WARNINGS.get(user_id, 0) + 1
-            warnings_left = MAX_WARNINGS - USER_WARNINGS[user_id]
+        user = await event.get_sender()
+        if user.id in data["whitelist"]:
+            return  # Whitelisted user
+        if user.id in data["blacklist"]:
+            await client(functions.contacts.BlockRequest(user.id))
+            return
 
-            if USER_WARNINGS[user_id] < MAX_WARNINGS:
-                warning_msg = (
-                    f"⚠ **Warning!**\n\n"
-                    f"You are not approved to DM the owner.\n"
-                    f"Warnings left before mute: `{warnings_left}`"
-                )
-                await event.respond(warning_msg)
-            else:
-                try:
-                    await client.edit_permissions(event.chat_id, send_messages=False)
-                except Exception:
-                    pass
-                await event.respond("🚫 **You have been muted due to repeated DMs.**")
+        warnings = data["warnings"].get(str(user.id), 0) + 1
+        data["warnings"][str(user.id)] = warnings
+        save_data(data)
+
+        if warnings >= 3:
+            await event.respond("**You have been blocked for spamming my DMs.**")
+            await client(functions.contacts.BlockRequest(user.id))
+        else:
+            await event.respond(
+                f"**Warning {warnings}/3:** Please do not message me without approval."
+            )
