@@ -35,3 +35,9 @@ html2text
 wikipedia-api
 PyMuPDF
 praw
+art
+pyzbar  
+wikipedia 
+youtube_dl
+setuptools 
+userbot
