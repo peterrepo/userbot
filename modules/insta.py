@@ -1,27 +1,78 @@
 import os
+import json
 import requests
 from telethon import events
 from instagrapi import Client
+from instagrapi.exceptions import LoginRequired, ChallengeRequired
 from config import OWNER_ID
 
 # ============================
-# Instagram Client Login
+# Paths and Directories
 # ============================
-USERNAME = "serenehashira"
-PASSWORD = "tomioka2008"
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+SESSION_FILE = os.path.join(DATA_DIR, "session.json")
+TEMP_DIR = os.path.join(DATA_DIR, "insta_temp")
 
-cl = Client()
-try:
-    cl.login(USERNAME, PASSWORD)
-except Exception as e:
-    print(f"❌ Instagram login failed: {e}")
-
-# Ensure temp directory exists
-TEMP_DIR = "insta_temp"
+os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 # ============================
-# Register Function
+# Instagram Client
+# ============================
+cl = Client()
+
+def save_session():
+    """Save current session to session.json"""
+    with open(SESSION_FILE, "w") as f:
+        json.dump(cl.get_settings(), f)
+    print("✅ Instagram session saved.")
+
+def load_session():
+    """Load session from session.json"""
+    if os.path.exists(SESSION_FILE):
+        with open(SESSION_FILE, "r") as f:
+            settings = json.load(f)
+        cl.set_settings(settings)
+        try:
+            cl.get_timeline_feed()
+            print("✅ Instagram session loaded.")
+            return True
+        except LoginRequired:
+            print("⚠️ Session expired. Need to re-login.")
+            return False
+    return False
+
+def login_interactive():
+    """Interactive login with OTP if required."""
+    username = input("Enter Instagram Username: ")
+    password = input("Enter Instagram Password: ")
+    try:
+        cl.login(username, password)
+        save_session()
+    except ChallengeRequired:
+        print("⚠️ Instagram requires OTP.")
+        cl.challenge_code_handler = lambda _: input("Enter OTP sent by Instagram: ")
+        cl.login(username, password)
+        save_session()
+    except Exception as e:
+        print(f"❌ Instagram login failed: {e}")
+        raise
+
+if not load_session():
+    login_interactive()
+
+# ============================
+# Helper to Download File
+# ============================
+def download_url(url, filename):
+    path = os.path.join(TEMP_DIR, filename)
+    r = requests.get(url, timeout=15)
+    with open(path, "wb") as f:
+        f.write(r.content)
+    return path
+
+# ============================
+# Register Bot Commands
 # ============================
 def register(client):
 
@@ -32,7 +83,7 @@ def register(client):
     async def insta_user(event):
         if event.sender_id != OWNER_ID:
             return
-        username = event.pattern_match.group(1)
+        username = event.pattern_match.group(1).strip()
         await event.respond(f"🔍 Fetching Instagram info for {username}...")
 
         try:
@@ -41,7 +92,7 @@ def register(client):
             followers = user_info.get("follower_count", 0)
             following = user_info.get("following_count", 0)
             posts = user_info.get("media_count", 0)
-            profile_pic_url = user_info.get("profile_pic_url_hd", user_info.get("profile_pic_url"))
+            profile_pic_url = user_info.get("profile_pic_url_hd") or user_info.get("profile_pic_url")
 
             caption = (
                 f"**📸 Instagram User Info**\n\n"
@@ -54,15 +105,9 @@ def register(client):
             )
 
             if profile_pic_url:
-                img_path = os.path.join(TEMP_DIR, "profile.jpg")
-                try:
-                    r = requests.get(profile_pic_url, timeout=10)
-                    with open(img_path, "wb") as f:
-                        f.write(r.content)
-                    await event.respond(caption, file=img_path)
-                    os.remove(img_path)
-                except Exception as img_err:
-                    await event.respond(f"{caption}\n\n⚠️ Failed to fetch profile image: {img_err}")
+                img_path = download_url(profile_pic_url, "profile.jpg")
+                await event.respond(caption, file=img_path)
+                os.remove(img_path)
             else:
                 await event.respond(caption)
 
@@ -76,11 +121,11 @@ def register(client):
     async def insta_reel(event):
         if event.sender_id != OWNER_ID:
             return
-        url = event.pattern_match.group(1)
+        url = event.pattern_match.group(1).strip()
         await event.respond("📥 Downloading reel...")
         try:
-            media = cl.media_pk_from_url(url)
-            file_path = cl.video_download(media, folder=TEMP_DIR)
+            media_pk = cl.media_pk_from_url(url)
+            file_path = cl.video_download(media_pk, folder=TEMP_DIR)
             await event.respond("✅ Reel downloaded:", file=file_path)
             os.remove(file_path)
         except Exception as e:
@@ -93,7 +138,7 @@ def register(client):
     async def insta_post(event):
         if event.sender_id != OWNER_ID:
             return
-        url = event.pattern_match.group(1)
+        url = event.pattern_match.group(1).strip()
         await event.respond("📥 Downloading post...")
         try:
             media_pk = cl.media_pk_from_url(url)
@@ -114,7 +159,7 @@ def register(client):
     async def insta_story(event):
         if event.sender_id != OWNER_ID:
             return
-        username = event.pattern_match.group(1)
+        username = event.pattern_match.group(1).strip()
         await event.respond(f"📥 Fetching stories for {username}...")
         try:
             user_id = cl.user_id_from_username(username)
@@ -124,11 +169,11 @@ def register(client):
                 return
 
             for story in stories:
-                media_type = story.dict().get("media_type")
-                if media_type == 1:  # Photo
-                    file_path = cl.photo_download_by_url(story.dict()["thumbnail_url"], TEMP_DIR)
-                else:  # Video
-                    file_path = cl.video_download_by_url(story.dict()["video_url"], TEMP_DIR)
+                s = story.dict()
+                if s.get("media_type") == 1:
+                    file_path = download_url(s["thumbnail_url"], "story.jpg")
+                else:
+                    file_path = download_url(s["video_url"], "story.mp4")
                 await event.respond(file=file_path)
                 os.remove(file_path)
         except Exception as e:
