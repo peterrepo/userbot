@@ -1,76 +1,53 @@
-import os
 import requests
 from telethon import events
-from config import OWNER_ID, GOOGLE_API_KEY, CSE_ID
+from config import OWNER_ID  # Import OWNER_ID from your config.py
 
-GOOGLE_SEARCH_URL = "https://www.googleapis.com/customsearch/v1"
+# ==============================
+# CONFIG (Your API key and CSE ID)
+# ==============================
+GOOGLE_API_KEY = "AIzaSyBfFaDrZl0WYfPIisV9p05p_voCjw8oa4o"
+GOOGLE_CSE_ID = "27648cc769b164f0a"
 
-# ====== Decorator to restrict commands to owner only ======
-def is_owner(func):
-    async def wrapper(event, *args, **kwargs):
-        if event.sender_id != OWNER_ID:
-            await event.reply("❌ You are not authorized to use this command.")
-            return
-        return await func(event, *args, **kwargs)
-    return wrapper
-
+# ==============================
+# Register module
+# ==============================
 def register(client):
 
-    # --------------------
-    # Google Image Search
-    # --------------------
     @client.on(events.NewMessage(pattern=r"^\.img (.+)"))
-    @is_owner
     async def google_image_search(event):
+        # Owner-only check
+        if event.sender_id != OWNER_ID:
+            return
+
         query = event.pattern_match.group(1)
-        await event.edit(f"🔍 **Searching for:** `{query}`")
+        await event.respond(f"🔍 Searching images for: `{query}`")
+
         try:
-            params = {
-                "q": query,
-                "cx": CSE_ID,
-                "key": GOOGLE_API_KEY,
-                "searchType": "image",
-                "num": 5
-            }
-            response = requests.get(GOOGLE_SEARCH_URL, params=params).json()
-            if "items" not in response:
-                await event.edit("❌ No images found or API error.")
+            url = (
+                f"https://www.googleapis.com/customsearch/v1?"
+                f"key={GOOGLE_API_KEY}&cx={GOOGLE_CSE_ID}&searchType=image&q={query}&num=5"
+            )
+            response = requests.get(url)
+
+            if response.status_code != 200:
+                await event.respond(f"❌ Google API Error: {response.status_code} - {response.text}")
                 return
-            
-            result_links = [item["link"] for item in response["items"]]
-            await client.send_file(event.chat_id, result_links, caption=f"**Results for:** `{query}`")
-            await event.delete()
-        except Exception as e:
-            await event.edit(f"❌ Error: {e}")
 
-    # ------------------------
-    # Reverse Image Search
-    # ------------------------
-    @client.on(events.NewMessage(pattern=r"^\.reverse$"))
-    @is_owner
-    async def reverse_image_search(event):
-        if not event.reply_to_msg_id:
-            return await event.reply("Reply to an image to reverse search.")
-        
-        reply = await event.get_reply_message()
-        if not reply.media:
-            return await event.reply("❌ No image found in the replied message.")
-        
-        img_path = await client.download_media(reply, "reverse_search.jpg")
-        await event.edit("🔄 **Performing reverse image search...**")
-        
-        try:
-            search_url = "http://www.google.com/searchbyimage/upload"
-            multipart = {"encoded_image": (img_path, open(img_path, "rb")), "image_content": ""}
-            response = requests.post(search_url, files=multipart, allow_redirects=False)
-            fetch_url = response.headers.get("Location")
+            data = response.json()
 
-            if fetch_url:
-                await event.edit(f"🔍 **Google Lens Result:** [Click Here]({fetch_url})")
-            else:
-                await event.edit("❌ Could not retrieve reverse search results.")
+            if "items" not in data:
+                await event.respond("❌ **No image results found.**")
+                return
+
+            # Get top 5 image URLs
+            image_links = [item["link"] for item in data["items"][:5]]
+
+            # Send images
+            for link in image_links:
+                try:
+                    await event.client.send_file(event.chat_id, link)
+                except Exception as e:
+                    await event.respond(f"⚠️ Skipped broken image link. Error: `{e}`")
+
         except Exception as e:
-            await event.edit(f"❌ Error: {e}")
-        finally:
-            if os.path.exists(img_path):
-                os.remove(img_path)
+            await event.respond(f"❌ Error while fetching images: `{e}`")

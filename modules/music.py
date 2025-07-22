@@ -1,84 +1,95 @@
 import os
-import requests
-import youtube_dl
+import asyncio
+import time
+import yt_dlp
 from telethon import events
-from config import OWNER_ID, YT_API_KEY
+from config import OWNER_ID
 
-# Temporary folder for downloads
-DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "downloads")
+# ======================
+# Paths and Directories
+# ======================
+MODULE_DIR = os.path.dirname(__file__)
+DATA_DIR = os.path.join(MODULE_DIR, "../data")
+DOWNLOAD_DIR = os.path.join(DATA_DIR, "music")
+COOKIES_FILE = os.path.join(MODULE_DIR, "cookies.txt")
+
+# Ensure all required directories exist
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# Owner check decorator
-def is_owner(func):
-    async def wrapper(event, *args, **kwargs):
-        if event.sender_id != OWNER_ID:
-            await event.reply("❌ You are not authorized to use this command.")
-            return
-        return await func(event, *args, **kwargs)
-    return wrapper
 
-# Search YouTube for a song
-def youtube_search(query):
-    try:
-        search_url = f"https://www.googleapis.com/youtube/v3/search"
-        params = {
-            "part": "snippet",
-            "q": query,
-            "type": "video",
-            "key": YT_API_KEY,
-            "maxResults": 1
-        }
-        response = requests.get(search_url, params=params)
-        data = response.json()
-        if "items" not in data or not data["items"]:
-            return None
-        video_id = data["items"][0]["id"]["videoId"]
-        return f"https://www.youtube.com/watch?v={video_id}"
-    except Exception:
-        return None
+# ======================
+# Auto-Clean Old Files
+# ======================
+def clean_old_files(directory, max_age_hours=1):
+    now = time.time()
+    max_age = max_age_hours * 3600
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        if os.path.isfile(file_path):
+            if now - os.path.getmtime(file_path) > max_age:
+                try:
+                    os.remove(file_path)
+                    print(f"🗑 Deleted old file: {file_path}")
+                except Exception as e:
+                    print(f"❌ Error deleting file {file_path}: {e}")
 
+
+# ======================
+# Download Music
+# ======================
+def download_song(query):
+    """
+    Downloads the best audio for the given query from YouTube.
+    Returns (file_path, title).
+    """
+    clean_old_files(DOWNLOAD_DIR)  # Clean old files before download
+    output_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
+
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": output_path,
+        "noplaylist": True,
+        "quiet": True,
+        "nocheckcertificate": True,
+        "ignoreerrors": False,
+        "cookiefile": COOKIES_FILE if os.path.isfile(COOKIES_FILE) else None,
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }
+        ],
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(f"ytsearch1:{query}", download=True)
+        if not info or "entries" not in info or len(info["entries"]) == 0:
+            raise Exception("No results found for this query.")
+        entry = info["entries"][0]
+        downloaded_file = ydl.prepare_filename(entry)
+        mp3_file = os.path.splitext(downloaded_file)[0] + ".mp3"
+        return mp3_file, entry.get("title", "Unknown Title")
+
+
+# ======================
+# Register Command
+# ======================
 def register(client):
-
-    # ----------------------
-    # Music Search
-    # ----------------------
     @client.on(events.NewMessage(pattern=r"^\.music (.+)"))
-    @is_owner
-    async def music_search(event):
-        query = event.pattern_match.group(1)
-        await event.edit(f"🎵 Searching music for: **{query}**")
-        url = youtube_search(query)
-        if not url:
-            return await event.edit("❌ No music found.")
-        await event.edit(f"🎧 Found track: {url}")
+    async def music_handler(event):
+        if event.sender_id != OWNER_ID:
+            return
 
-    # ----------------------
-    # Music Download
-    # ----------------------
-    @client.on(events.NewMessage(pattern=r"^\.song (.+)"))
-    @is_owner
-    async def music_download(event):
-        query = event.pattern_match.group(1)
-        await event.edit(f"⬇ Downloading song for: **{query}**")
-        url = youtube_search(query)
-        if not url:
-            return await event.edit("❌ No song found.")
+        query = event.pattern_match.group(1).strip()
+        await event.respond(f"🎵 Searching and downloading: {query} ...")
+        await asyncio.sleep(2)
+        await event.delete()
 
-        file_path = os.path.join(DOWNLOAD_DIR, "song.mp3")
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': file_path,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-        }
         try:
-            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-            await client.send_file(event.chat_id, file_path, caption=f"🎶 **{query}**")
-            os.remove(file_path)
-            await event.delete()
+            mp3_path, title = await asyncio.get_event_loop().run_in_executor(
+                None, download_song, query
+            )
+            await event.client.send_file(event.chat_id, mp3_path, caption=f"🎶 {title}")
         except Exception as e:
-            await event.edit(f"❌ Error: {e}")
+            await event.respond(f"❌ Error: {e}")

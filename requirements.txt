@@ -42,3 +42,8 @@ youtube_dl
 setuptools 
 userbot
 flask
+google-api-python-client
+instagrapi
+lyrics-extractor
+jiosaavn
+mutagen

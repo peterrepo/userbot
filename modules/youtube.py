@@ -1,88 +1,133 @@
 import os
-import yt_dlp
-import requests
+import asyncio
+import time
+from datetime import datetime, timedelta
 from telethon import events
-from config import OWNER_ID, YT_API_KEY
+from telethon.tl.types import MessageMediaDocument
+import yt_dlp
 
-YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+from config import OWNER_ID
 
-# Owner check decorator
-def is_owner(func):
-    async def wrapper(event, *args, **kwargs):
-        if event.sender_id != OWNER_ID:
-            await event.reply("❌ You are not authorized to use this command.")
-            return
-        return await func(event, *args, **kwargs)
-    return wrapper
+# Path for cookies
+COOKIES_PATH = os.path.join(os.path.dirname(__file__), "cookies.txt")
+DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "../data/youtube_downloads")
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+# Auto-clean downloaded files older than 1 hour
+def clean_old_files():
+    now = time.time()
+    for filename in os.listdir(DOWNLOAD_DIR):
+        file_path = os.path.join(DOWNLOAD_DIR, filename)
+        if os.path.isfile(file_path) and now - os.path.getmtime(file_path) > 3600:
+            os.remove(file_path)
 
-def youtube_search(query, max_results=5):
-    """Search YouTube using YouTube Data API."""
-    params = {
-        "part": "snippet",
-        "q": query,
-        "key": YT_API_KEY,
-        "maxResults": max_results,
-        "type": "video",
+# Search YouTube using yt-dlp
+def yt_search(query, limit=5):
+    ydl_opts = {
+        "quiet": True,
+        "skip_download": True,
+        "extract_flat": "in_playlist",
+        "noplaylist": True,
+        "cookiefile": COOKIES_PATH if os.path.exists(COOKIES_PATH) else None
     }
-    response = requests.get(YOUTUBE_SEARCH_URL, params=params)
-    if response.status_code == 200:
-        data = response.json()
-        results = []
-        for item in data["items"]:
-            title = item["snippet"]["title"]
-            video_id = item["id"]["videoId"]
-            url = f"https://www.youtube.com/watch?v={video_id}"
-            results.append(f"🎬 **{title}**\n{url}")
-        return "\n\n".join(results)
-    return None
+    results = []
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+            for entry in info.get("entries", []):
+                results.append({
+                    "title": entry.get("title"),
+                    "url": entry.get("url"),
+                    "duration": entry.get("duration"),
+                    "views": entry.get("view_count")
+                })
+    except Exception as e:
+        return f"❌ Error searching YouTube: {e}"
+    return results
 
+# Download YouTube video using yt-dlp
+def yt_download(url):
+    clean_old_files()
+    output_template = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": output_template,
+        "cookiefile": COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
+        "quiet": True
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            file_path = ydl.prepare_filename(info)
+        return file_path
+    except Exception as e:
+        return f"❌ Error downloading video: {e}"
 
+# Fetch channel info
+def yt_channel_info(channel_url):
+    ydl_opts = {
+        "quiet": True,
+        "skip_download": True,
+        "cookiefile": COOKIES_PATH if os.path.exists(COOKIES_PATH) else None
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(channel_url, download=False)
+            return {
+                "title": info.get("title"),
+                "description": info.get("description"),
+                "subscribers": info.get("subscriber_count"),
+                "url": info.get("webpage_url")
+            }
+    except Exception as e:
+        return f"❌ Error fetching channel info: {e}"
+
+# Register events
 def register(client):
 
-    # -------------------
-    # YouTube Search
-    # -------------------
     @client.on(events.NewMessage(pattern=r"^\.yt (.+)"))
-    @is_owner
-    async def yt_search(event):
-        query = event.pattern_match.group(1).strip()
-        await event.edit(f"🔍 **Searching YouTube for:** `{query}`")
+    async def yt_search_handler(event):
+        if event.sender_id != OWNER_ID:
+            return
+        query = event.pattern_match.group(1)
+        await event.respond(f"🔍 Searching YouTube for: {query} ...")
+        results = yt_search(query)
+        if isinstance(results, str):
+            await event.respond(results)
+        else:
+            msg = "🎥 **Top YouTube Results:**\n\n"
+            for idx, r in enumerate(results, 1):
+                msg += f"{idx}. [{r['title']}]({r['url']}) - {r['duration']}s - {r['views']} views\n"
+            await event.respond(msg, link_preview=False)
 
-        if not YT_API_KEY:
-            return await event.edit("❌ YouTube API Key not set in `config.py`.")
-
-        try:
-            results = youtube_search(query)
-            if not results:
-                return await event.edit("❌ No results found.")
-            await event.edit(results)
-        except Exception as e:
-            await event.edit(f"❌ Error: {e}")
-
-    # -------------------
-    # YouTube Downloader (Audio/Video)
-    # -------------------
     @client.on(events.NewMessage(pattern=r"^\.ytdl (.+)"))
-    @is_owner
-    async def yt_download(event):
-        url = event.pattern_match.group(1).strip()
-        await event.edit("📥 **Downloading video from YouTube...**")
+    async def yt_download_handler(event):
+        if event.sender_id != OWNER_ID:
+            return
+        url = event.pattern_match.group(1)
+        await event.respond(f"⬇️ Downloading video from: {url}")
+        file_path = yt_download(url)
+        if isinstance(file_path, str) and file_path.startswith("❌"):
+            await event.respond(file_path)
+        else:
+            await event.respond("🎵 Uploading downloaded file...")
+            await event.respond(file=file_path)
+            clean_old_files()
 
-        try:
-            ydl_opts = {
-                "format": "best",
-                "outtmpl": "downloads/%(title)s.%(ext)s",
-                "quiet": True,
-            }
-            os.makedirs("downloads", exist_ok=True)
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                file_path = ydl.prepare_filename(info)
-
-            await event.edit("📤 **Uploading video...**")
-            await client.send_file(event.chat_id, file_path, caption=f"🎬 {info.get('title')}")
-            os.remove(file_path)
-            await event.delete()
-        except Exception as e:
-            await event.edit(f"❌ Download failed: {e}")
+    @client.on(events.NewMessage(pattern=r"^\.ytchannel (.+)"))
+    async def yt_channel_handler(event):
+        if event.sender_id != OWNER_ID:
+            return
+        channel_url = event.pattern_match.group(1)
+        await event.respond(f"📡 Fetching channel info for: {channel_url}")
+        info = yt_channel_info(channel_url)
+        if isinstance(info, str):
+            await event.respond(info)
+        else:
+            msg = (
+                f"**Channel:** {info['title']}\n"
+                f"**Subscribers:** {info['subscribers']}\n"
+                f"**URL:** {info['url']}\n\n"
+                f"**Description:** {info['description']}"
+            )
+            await event.respond(msg)

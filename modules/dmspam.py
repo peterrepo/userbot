@@ -2,62 +2,56 @@ import asyncio
 from telethon import events
 from config import OWNER_ID
 
-# Track active DM spam tasks
-dmspam_tasks = {}
+# Global flag to control spam cancellation
+STOP_DM_SPAM = False
 
 def register(client):
-    @client.on(events.NewMessage(pattern=r"\.dmspam"))
-    async def start_dmspam(event):
-        if event.sender_id != OWNER_ID:
-            return  # Owner-only command
+    global STOP_DM_SPAM
 
-        args = event.raw_text.split(" ", 3)
-        if len(args) < 4:
-            await event.reply("**Usage:** `.dmspam <user_id/username> <count> <message>`")
-            await asyncio.sleep(0.5)
-            await event.delete()
+    @client.on(events.NewMessage(pattern=r"^\.dmspam (\d+) (.+)"))
+    async def dm_spam_handler(event):
+        global STOP_DM_SPAM
+
+        if event.sender_id != OWNER_ID:
             return
 
-        user = args[1]
+        if not event.is_reply:
+            await event.edit("❌ **Reply to a user’s message to spam their DM.**")
+            return
+
         try:
-            count = int(args[2])
-        except ValueError:
-            await event.reply("⚠ **Count must be a number!**")
-            await asyncio.sleep(0.5)
-            await event.delete()
-            return
+            reply_msg = await event.get_reply_message()
+            user = await client.get_entity(reply_msg.sender_id)
 
-        message = args[3]
-        await event.reply(f"🚀 **Starting DM spam to** `{user}` **for {count} messages.**")
+            count = int(event.pattern_match.group(1))
+            message = event.pattern_match.group(2)
 
-        async def spam_user():
+            STOP_DM_SPAM = False
+            await event.edit(f"🚀 **Spamming {user.first_name}'s DM {count} times...**")
+
             for i in range(count):
-                if event.sender_id in dmspam_tasks and dmspam_tasks[event.sender_id]["active"]:
-                    try:
-                        await client.send_message(user, message)
-                        await asyncio.sleep(0.5)  # Delay between messages
-                    except Exception as e:
-                        await event.respond(f"❌ **Error:** {e}")
-                        break
-                else:
+                if STOP_DM_SPAM:
+                    await event.respond("🛑 **DM spam stopped by owner.**")
                     break
-            await event.respond(f"✅ **DM spam completed for `{user}`.**")
 
-        dmspam_tasks[event.sender_id] = {"active": True}
-        asyncio.create_task(spam_user())
-        await asyncio.sleep(0.5)
-        await event.delete()
+                try:
+                    await client.send_message(user.id, message)
+                    await asyncio.sleep(0.5)
+                except Exception as e:
+                    await event.respond(f"⚠️ Error at message {i+1}: {e}")
+                    break
 
-    @client.on(events.NewMessage(pattern=r"\.stopdmspam"))
-    async def stop_dmspam(event):
+            else:
+                await event.respond(f"✅ **Finished spamming {user.first_name}.**")
+
+        except Exception as e:
+            await event.edit(f"⚠️ **Error:** {e}")
+
+    @client.on(events.NewMessage(pattern=r"^\.stopdmspam$"))
+    async def stop_dm_spam(event):
+        global STOP_DM_SPAM
         if event.sender_id != OWNER_ID:
-            return  # Owner-only command
+            return
+        STOP_DM_SPAM = True
+        await event.respond("🛑 **DM Spam has been stopped.**")
 
-        if event.sender_id in dmspam_tasks:
-            dmspam_tasks[event.sender_id]["active"] = False
-            await event.reply("🛑 **Stopped DM spam.**")
-        else:
-            await event.reply("⚠ **No active DM spam found.**")
-
-        await asyncio.sleep(0.5)
-        await event.delete()

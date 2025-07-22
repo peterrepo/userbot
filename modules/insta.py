@@ -1,104 +1,135 @@
 import os
 import requests
-import json
 from telethon import events
-from config import OWNER_ID, INSTAGRAM_USERNAME, INSTAGRAM_PASSWORD
+from instagrapi import Client
+from config import OWNER_ID
 
-# ====== Decorator for owner-only commands ======
-def is_owner(func):
-    async def wrapper(event, *args, **kwargs):
-        if event.sender_id != OWNER_ID:
-            await event.reply("❌ You are not authorized to use this command.")
-            return
-        return await func(event, *args, **kwargs)
-    return wrapper
+# ============================
+# Instagram Client Login
+# ============================
+USERNAME = "serenehashira"
+PASSWORD = "tomioka2008"
 
-# ====== Helper Function: Download Instagram Media via API ======
-def download_instagram_post(url):
-    try:
-        api = f"https://api.vyro.ai/v1/ig?url={url}"  # Example third-party endpoint
-        response = requests.get(api)
-        if response.status_code != 200:
-            return None
-        data = response.json()
-        return data.get("media", [])
-    except Exception:
-        return None
+cl = Client()
+try:
+    cl.login(USERNAME, PASSWORD)
+except Exception as e:
+    print(f"❌ Instagram login failed: {e}")
 
-# ====== Module Register ======
+# Ensure temp directory exists
+TEMP_DIR = "insta_temp"
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+# ============================
+# Register Function
+# ============================
 def register(client):
 
-    # ----------------------
-    # Instagram Post Download
-    # ----------------------
-    @client.on(events.NewMessage(pattern=r"^\.instadl (.+)"))
-    @is_owner
-    async def insta_download(event):
-        url = event.pattern_match.group(1)
-        await event.edit("⬇ **Downloading Instagram post...**")
-        media_links = download_instagram_post(url)
-        if not media_links:
-            return await event.edit("❌ Failed to fetch media. Maybe it's private?")
-        try:
-            await client.send_file(event.chat_id, media_links, caption="**Instagram Post**")
-            await event.delete()
-        except Exception as e:
-            await event.edit(f"❌ Error: {e}")
-
-    # ----------------------
-    # Instagram User Info
-    # ----------------------
-    @client.on(events.NewMessage(pattern=r"^\.instainfo (.+)"))
-    @is_owner
-    async def insta_info(event):
+    # ----------------------------
+    # USER INFO
+    # ----------------------------
+    @client.on(events.NewMessage(pattern=r"^\.instauser (.+)"))
+    async def insta_user(event):
+        if event.sender_id != OWNER_ID:
+            return
         username = event.pattern_match.group(1)
-        await event.edit(f"🔍 **Fetching Instagram info for:** `{username}`")
+        await event.respond(f"🔍 Fetching Instagram info for {username}...")
 
         try:
-            url = f"https://api.luxanna.cc/ig_user?username={username}"
-            response = requests.get(url)
-            if response.status_code != 200:
-                return await event.edit("❌ Could not fetch user info.")
+            user_info = cl.user_info_by_username(username).dict()
+            bio = user_info.get("biography", "N/A")
+            followers = user_info.get("follower_count", 0)
+            following = user_info.get("following_count", 0)
+            posts = user_info.get("media_count", 0)
+            profile_pic_url = user_info.get("profile_pic_url_hd", user_info.get("profile_pic_url"))
 
-            data = response.json()
-            info = (
-                f"**Instagram Profile Info**\n\n"
-                f"**Username:** {data.get('username')}\n"
-                f"**Name:** {data.get('full_name')}\n"
-                f"**Bio:** {data.get('biography')}\n"
-                f"**Followers:** {data.get('followers')}\n"
-                f"**Following:** {data.get('following')}\n"
-                f"**Posts:** {data.get('posts')}\n"
-                f"**Private:** {data.get('is_private')}\n"
+            caption = (
+                f"**📸 Instagram User Info**\n\n"
+                f"**Username:** `{username}`\n"
+                f"**Full Name:** {user_info.get('full_name', 'N/A')}\n"
+                f"**Bio:** {bio}\n"
+                f"**Followers:** {followers}\n"
+                f"**Following:** {following}\n"
+                f"**Posts:** {posts}"
             )
-            profile_pic = data.get("profile_pic_url")
-            if profile_pic:
-                await client.send_file(event.chat_id, profile_pic, caption=info)
+
+            if profile_pic_url:
+                img_path = os.path.join(TEMP_DIR, "profile.jpg")
+                try:
+                    r = requests.get(profile_pic_url, timeout=10)
+                    with open(img_path, "wb") as f:
+                        f.write(r.content)
+                    await event.respond(caption, file=img_path)
+                    os.remove(img_path)
+                except Exception as img_err:
+                    await event.respond(f"{caption}\n\n⚠️ Failed to fetch profile image: {img_err}")
             else:
-                await event.edit(info)
+                await event.respond(caption)
+
         except Exception as e:
-            await event.edit(f"❌ Error: {e}")
+            await event.respond(f"❌ Error fetching user info: {e}")
 
-    # ----------------------
-    # Instagram Stories (Public)
-    # ----------------------
-    @client.on(events.NewMessage(pattern=r"^\.instastory (.+)"))
-    @is_owner
-    async def insta_story(event):
-        username = event.pattern_match.group(1)
-        await event.edit(f"⬇ **Fetching latest stories for:** `{username}`")
-
+    # ----------------------------
+    # REELS DOWNLOAD
+    # ----------------------------
+    @client.on(events.NewMessage(pattern=r"^\.instareel (.+)"))
+    async def insta_reel(event):
+        if event.sender_id != OWNER_ID:
+            return
+        url = event.pattern_match.group(1)
+        await event.respond("📥 Downloading reel...")
         try:
-            url = f"https://api.luxanna.cc/ig_stories?username={username}"
-            response = requests.get(url)
-            if response.status_code != 200:
-                return await event.edit("❌ No stories found or user is private.")
-
-            data = response.json().get("stories", [])
-            if not data:
-                return await event.edit("❌ No stories available.")
-
-            await client.send_file(event.chat_id, data, caption=f"**Stories of {username}**")
-            await event.delete()
+            media = cl.media_pk_from_url(url)
+            file_path = cl.video_download(media, folder=TEMP_DIR)
+            await event.respond("✅ Reel downloaded:", file=file_path)
+            os.remove(file_path)
         except Exception as e:
-            await event.edit(f"❌ Error: {e}")
+            await event.respond(f"❌ Error downloading reel: {e}")
+
+    # ----------------------------
+    # POSTS DOWNLOAD
+    # ----------------------------
+    @client.on(events.NewMessage(pattern=r"^\.instapost (.+)"))
+    async def insta_post(event):
+        if event.sender_id != OWNER_ID:
+            return
+        url = event.pattern_match.group(1)
+        await event.respond("📥 Downloading post...")
+        try:
+            media_pk = cl.media_pk_from_url(url)
+            media_info = cl.media_info(media_pk).dict()
+            if media_info.get("media_type") == 1:  # Photo
+                file_path = cl.photo_download(media_pk, folder=TEMP_DIR)
+            else:  # Video
+                file_path = cl.video_download(media_pk, folder=TEMP_DIR)
+            await event.respond("✅ Post downloaded:", file=file_path)
+            os.remove(file_path)
+        except Exception as e:
+            await event.respond(f"❌ Error downloading post: {e}")
+
+    # ----------------------------
+    # STORIES DOWNLOAD
+    # ----------------------------
+    @client.on(events.NewMessage(pattern=r"^\.instastory (.+)"))
+    async def insta_story(event):
+        if event.sender_id != OWNER_ID:
+            return
+        username = event.pattern_match.group(1)
+        await event.respond(f"📥 Fetching stories for {username}...")
+        try:
+            user_id = cl.user_id_from_username(username)
+            stories = cl.user_stories(user_id)
+            if not stories:
+                await event.respond("⚠️ No active stories found.")
+                return
+
+            for story in stories:
+                media_type = story.dict().get("media_type")
+                if media_type == 1:  # Photo
+                    file_path = cl.photo_download_by_url(story.dict()["thumbnail_url"], TEMP_DIR)
+                else:  # Video
+                    file_path = cl.video_download_by_url(story.dict()["video_url"], TEMP_DIR)
+                await event.respond(file=file_path)
+                os.remove(file_path)
+        except Exception as e:
+            await event.respond(f"❌ Error downloading story: {e}")
