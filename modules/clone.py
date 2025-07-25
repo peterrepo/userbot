@@ -43,7 +43,7 @@ def register(client):
             await event.respond(f"❌ Couldn't fetch user: `{e}`")
             return
 
-        target = user.user
+        target = user.users[0]
         full_target = user.full_user
 
         # Extract name & bio
