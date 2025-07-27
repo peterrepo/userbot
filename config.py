@@ -8,7 +8,7 @@ GLOBALS_JSON = os.path.join(DATA_DIR, "globals.json")
 API_ID = 28289547  # Your Telegram API ID (from my.telegram.org)
 API_HASH = "fb26885f55aad0acbda5ac7f3adf60f6"  # Your Telegram API Hash
 SESSION_STRING = "1BVtsOI4Bu7_Nt9kBWsKPR6XZRHcVo0acMXDXKaa2ttyduowJxADFP012qzvaO6HqkbYQXnMsbXwtse-6Y1ByvZBoyw1mVgn4qElLPr_14cQ9h_hsFUFjElKt8i1crQzTbu_9Ly2QXJiMFTe2BAgomqZ7edDby5h0gkXvwZVywiayrqx7ymCPysbZDv6ZnvQO5BxFyaILjjHVa0dYKH8UOvodYuP-7PLAoPqtZbo6Y_ixxbTmvZzutpP8PCgtlJ-tYEIFZjiv5FKxH8TfnXh5OtqgQcjKYQKc9eAWTgJT4fSmaDChhkauGopH_WALW5xxe6skOR8btWKJf5Na6KHgdr5n-h5WprE="
-
+OWNER_ID = "7841668686"
 # ======================
 # DATABASE & STORAGE
 # ======================
