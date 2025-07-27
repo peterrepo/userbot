@@ -7,8 +7,7 @@ GLOBALS_JSON = os.path.join(DATA_DIR, "globals.json")
 # ======================
 API_ID = 28289547  # Your Telegram API ID (from my.telegram.org)
 API_HASH = "fb26885f55aad0acbda5ac7f3adf60f6"  # Your Telegram API Hash
-SESSION_STRING = "1BVtsOIsBuxisCBi3QdOt6601bdjZjIVA-qWjbOHrfrfLhNfRktJxG972rk8-ym0vFQ-UCvY0uIlzz3yGl3rZFwyJZ0n8Yu4ukf2Prb9c-NUkRvcbs9iEbcKLI6Gb2XpnETLI-0wnxt_-poULoAwupf45L-jw4z7MoJInT93C_uAF3dQ8PkwqtxMcUmV0S1Be7j53xtc5TpCMLz8zO37POk6fM0eCICyb6a6EnCqo4AiU3rkoa139I_a0KvyGc0I_fVq_n3l9yJGKaEoH6DCxwgEi85FUogAzDpnr1IbiNddpZmw0HZHmFAkgIZHB3TR9ZdRhywfDuUVZLWUNQvHj80B1DKONyIk="  # Your Telethon session string
-OWNER_ID = 7841668686  # Your Telegram user ID (owner)
+SESSION_STRING = "1BVtsOI4Bu7_Nt9kBWsKPR6XZRHcVo0acMXDXKaa2ttyduowJxADFP012qzvaO6HqkbYQXnMsbXwtse-6Y1ByvZBoyw1mVgn4qElLPr_14cQ9h_hsFUFjElKt8i1crQzTbu_9Ly2QXJiMFTe2BAgomqZ7edDby5h0gkXvwZVywiayrqx7ymCPysbZDv6ZnvQO5BxFyaILjjHVa0dYKH8UOvodYuP-7PLAoPqtZbo6Y_ixxbTmvZzutpP8PCgtlJ-tYEIFZjiv5FKxH8TfnXh5OtqgQcjKYQKc9eAWTgJT4fSmaDChhkauGopH_WALW5xxe6skOR8btWKJf5Na6KHgdr5n-h5WprE="
 
 # ======================
 # DATABASE & STORAGE
